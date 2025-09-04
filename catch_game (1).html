@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Catch the Falling Objects - Ultimate Edition</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: linear-gradient(to bottom, #111, #000);
+      font-family: 'Comic Sans MS', Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+      background: radial-gradient(circle at center, #222 0%, #000 100%);
+      border: 3px solid #0f0;
+      box-shadow: 0 0 20px #0f0;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-size: 22px;
+      text-align: center;
+      z-index: 10;
+      user-select: none;
+      text-shadow: 2px 2px 4px #000;
+    }
+    #credits {
+      position: absolute;
+      bottom: 5px;
+      right: 10px;
+      color: #f0f;
+      font-size: 14px;
+      font-style: italic;
+      z-index: 10;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">Score: 0 | High Score: 0 | Catch'em all!</div>
+  <div id="credits">Made with ❤️ by ChatGPT &amp; Bomennugget</div>
+  <canvas id="gameCanvas" width="600" height="700"></canvas>
+
+  <!-- Audio Elements -->
+  <audio id="catchSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" preload="auto"></audio>
+  <audio id="missSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
+  <audio id="secretSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" preload="auto"></audio>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const hud = document.getElementById('hud');
+
+    let basket = { x: canvas.width/2 - 50, y: canvas.height - 40, width: 100, height: 20, speed: 12 };
+    let balls = [];
+    let score = 0;
+    let highScore = parseInt(localStorage.getItem('catchHighScore')) || 0;
+    let gameOver = false;
+    let level = 1;
+    let secretsUnlocked = [];
+    let lives = 5;
+
+    const catchSound = document.getElementById('catchSound');
+    const missSound = document.getElementById('missSound');
+    const secretSound = document.getElementById('secretSound');
+
+    let particles = [];
+    function createParticles(x,y,color){
+      for(let i=0;i<15;i++){
+        particles.push({x,y,radius:Math.random()*4+2,color,dx:(Math.random()-0.5)*6,dy:(Math.random()-2)*6,life:60});
+      }
+    }
+    function drawParticles(){
+      for(let i=particles.length-1;i>=0;i--){
+        const p = particles[i];
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.radius,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); ctx.closePath();
+        p.x+=p.dx; p.y+=p.dy; p.life--; if(p.life<=0) particles.splice(i,1);
+      }
+    }
+
+    function drawBasket(){
+      ctx.fillStyle='lime'; ctx.fillRect(basket.x,basket.y,basket.width,basket.height);
+      ctx.strokeStyle='#0f0'; ctx.lineWidth=3; ctx.strokeRect(basket.x,basket.y,basket.width,basket.height);
+      ctx.font='14px Comic Sans MS'; ctx.fillStyle='#fff'; ctx.fillText('Catch me!', basket.x+10, basket.y-5);
+    }
+
+    function drawBall(ball){
+      ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.radius,0,Math.PI*2); ctx.fillStyle=ball.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.closePath();
+      if(ball.secret){ ctx.font='16px Comic Sans MS'; ctx.fillText('💎', ball.x-6, ball.y+4); }
+    }
+
+    function newBall(){
+      const x=Math.random()*(canvas.width-20)+10;
+      const colors=['red','yellow','cyan','magenta','orange','lime'];
+      const isSpecial=Math.random()<0.15;
+      balls.push({x,y:0,radius:12,speed:2+Math.random()*(1+level*0.7),color:isSpecial?'gold':colors[Math.floor(Math.random()*colors.length)],secret:isSpecial});
+    }
+
+    function updateBalls(){
+      for(let i=balls.length-1;i>=0;i--){
+        const ball=balls[i]; ball.y+=ball.speed;
+        if(ball.y+ball.radius>=basket.y && ball.x>basket.x && ball.x<basket.x+basket.width){
+          createParticles(ball.x,ball.y,ball.color);
+          if(ball.secret) unlockSecret(); else score++;
+          catchSound.currentTime=0; catchSound.play().catch(()=>{});
+          balls.splice(i,1);
+        } else if(ball.y-ball.radius>canvas.height){ balls.splice(i,1); loseLife(); }
+      }
+    }
+
+    function loseLife(){
+      lives--; missSound.currentTime=0; missSound.play().catch(()=>{});
+      hud.textContent+= ' 😱';
+      if(lives<=0) gameOver=true;
+    }
+
+    function unlockSecret(){
+      if(!secretsUnlocked.includes('goldenBall')){
+        secretsUnlocked.push('goldenBall'); secretSound.currentTime=0; secretSound.play().catch(()=>{}); score+=20;
+        hud.textContent=`✨ Secret Golden Ball Caught! Score: ${score}`;
+      } else score+=10;
+    }
+
+    function updateHUD(){
+      const secretText=secretsUnlocked.length>0?` | Secrets: ${secretsUnlocked.length}`:'';
+      hud.textContent=`Score: ${score} | High Score: ${highScore} | Level: ${level} | Lives: ${lives}${secretText}`;
+    }
+
+    function gameLoop(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if(gameOver){
+        if(score>highScore){highScore=score; localStorage.setItem('catchHighScore',highScore);}
+        updateHUD();
+        ctx.fillStyle='white'; ctx.font='50px Comic Sans MS'; ctx.fillText('Game Over!', 120, 300);
+        ctx.font='20px Comic Sans MS'; ctx.fillText('Click, Tap, or Press Space to Restart', 80, 340);
+        return;
+      }
+      drawBasket(); balls.forEach(drawBall); drawParticles(); updateBalls();
+      level=1+Math.floor(score/10); updateHUD();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.addEventListener('keydown',e=>{
+      if(e.key==='ArrowLeft') basket.x=Math.max(0,basket.x-basket.speed);
+      else if(e.key==='ArrowRight') basket.x=Math.min(canvas.width-basket.width,basket.x+basket.speed);
+      else if(e.key===' ' && gameOver) restartGame();
+      if(e.key.toLowerCase()==='s') unlockSecret();
+    });
+
+    canvas.addEventListener('mousemove',e=>{
+      const mouseX=e.clientX-canvas.getBoundingClientRect().left;
+      basket.x=Math.min(Math.max(mouseX-basket.width/2,0),canvas.width-basket.width);
+    });
+
+    canvas.addEventListener('touchmove',e=>{
+      const touchX=e.touches[0].clientX-canvas.getBoundingClientRect().left;
+      basket.x=Math.min(Math.max(touchX-basket.width/2,0),canvas.width-basket.width);
+    });
+
+    canvas.addEventListener('click',()=>{if(gameOver) restartGame();});
+
+    function restartGame(){ balls=[]; score=0; level=1; lives=5; gameOver=false; secretsUnlocked=[]; particles=[]; gameLoop(); }
+
+    setInterval(()=>{if(!gameOver) newBall();},900);
+
+    gameLoop();
+  </script>
+</body>
+</html>
